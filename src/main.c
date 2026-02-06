@@ -1,134 +1,199 @@
+#include "coordQueue.h"
+#include "globals.h"
+
 #include <ncurses.h>
 #include <string.h>
 
-int isDir(int d) {
-    mvprintw(2, 0, "got dir: %c", d);
-    return (d == 'h' | d == 'j' | d == 'k' | d == 'l');
+const int TICK = 8000;
+// HACK: Since characters are taller than they are wider,
+// the percieved horizontal speed > vertical speed.
+// Treating each horizontal tile as 2 characters smooths it.
+const int HORIZONTAL_MULTIPLIER = 2;
+
+void updateTail(Queue *tail, coord lastHeadPos) {
+    coord tmp;
+    // remove the last part of tail
+    dequeue(tail, &tmp);
+
+    // add
+    enqueue(tail, lastHeadPos);
+}
+
+void drawTail(const Queue *tail) {
+    struct Node *curNode = tail->front;
+    while (curNode != NULL) {
+        mvprintw(curNode->data.y, curNode->data.x, "o");
+        curNode = curNode->next;
+    }
+}
+
+void printQueue(const Queue *tail) {
+    struct Node *curNode = tail->front;
+    while (curNode != NULL) {
+        printw("y:%d x:%d\n", curNode->data.y, curNode->data.x);
+        curNode = curNode->next;
+    }
+}
+
+int isDir(int d) { return (d == 'h' | d == 'j' | d == 'k' | d == 'l'); }
+
+void init() {
+    initscr();
+    noecho();
+    curs_set(0);
+}
+
+// Displays the title screen and waits for input.
+int titleScreen(int *curDirection) {
+    // Print the title
+    char *titleString = "Press hjkl to start!";
+    mvprintw(LINES / 2, COLS / 2 - strlen(titleString) / 2, "%s", titleString);
+
+    // Wait for initial input
+    int ch;
+    while (1) {
+        ch = getch();
+        if (isDir(ch)) {
+            *curDirection = ch;
+            nodelay(stdscr, 1);
+            return 0;
+        }
+    }
+    return 1;
 }
 
 int main() {
-    // init functions
-    initscr();
-    noecho();
-    nodelay(stdscr, 1);
-    curs_set(0);
+    init();
 
-    const int TICK = 8000;
-    // HACK: Since characters are taller than they are wider,
-    // the percieved horizontal speed > vertical speed.
-    // Treating each horizontal tile as 2 characters smooths it.
-    const int HORIZONTAL_MULTIPLIER = 2;
-    int running = 0;
-
-    // snake start pos
-    int head_x = COLS / 2;
-    int head_y = LINES / 2;
-
-    enum directions {
-        DIR_LEFT = 'h',
-        DIR_DOWN = 'j',
-        DIR_UP = 'k',
-        DIR_RIGHT = 'l'
-    };
+    coord snakeCoords = {.y = LINES / 2, .x = COLS / 2};
+    coord lastSnakeCoords = snakeCoords;
 
     // Snake head char
     char curHead = '+';
     int curDirection;
 
+    Queue snakeTail;
+    queueInit(&snakeTail);
+
     unsigned int clk = 0;
     unsigned int lastUpdate = 0;
 
-    int ch;
-    while (1) {
-        char *titleString = "Press hjkl to start!";
-        mvprintw(head_y, head_x - strlen(titleString), "%s", titleString);
-        ch = getch();
-        if (isDir(ch)) {
-            running = 1;
-            curDirection = ch;
-            break;
-        }
+    if (titleScreen(&curDirection)) {
+        return 1;
     }
 
-    clear();
-    while (running) {
-        // clear last frame
+    coord aaa;
+    for (int i = 0; i < 50; i++) {
+        aaa.y = snakeCoords.y;
+        aaa.x = snakeCoords.x - i * 2;
+        enqueue(&snakeTail, aaa);
+    }
 
-        ch = getch();
+    // Initial direction of the head
+    switch (curDirection) {
+    case DIR_LEFT:
+        curHead = '<';
+        break;
+    case DIR_DOWN:
+        curHead = 'v';
+        break;
+    case DIR_UP:
+        curHead = '^';
+        break;
+    case DIR_RIGHT:
+        curHead = '>';
+        break;
+    }
+
+    // Main game loop
+    while (1) {
+        int ch = getch();
+
         // update state
         switch (ch) {
         case 'h':
-            curDirection = DIR_LEFT;
-            // cur_head = '<';
+            if (curDirection != DIR_RIGHT) {
+                curDirection = DIR_LEFT;
+                curHead = '<';
+            }
             break;
         case 'j':
-            curDirection = DIR_DOWN;
-            // cur_head = 'v';
+            if (curDirection != DIR_UP) {
+                curDirection = DIR_DOWN;
+                curHead = 'v';
+            }
             break;
         case 'k':
-            curDirection = DIR_UP;
-            // cur_head = '^';
+            if (curDirection != DIR_DOWN) {
+                curDirection = DIR_UP;
+                curHead = '^';
+            }
             break;
         case 'l':
-            curDirection = DIR_RIGHT;
-            // cur_head = '>';
-            break;
-        default:
-            mvprintw(3, 0, "no char read: %d", clk);
+            if (curDirection != DIR_LEFT) {
+                curDirection = DIR_RIGHT;
+                curHead = '>';
+            }
             break;
         }
 
-        // update position
-        switch (curDirection) {
-        case DIR_LEFT:
-            if (clk > lastUpdate + TICK) {
-                head_x -= 1 * HORIZONTAL_MULTIPLIER;
+        if (clk > lastUpdate + TICK) {
+
+            // update position
+            switch (curDirection) {
+            case DIR_LEFT:
+                lastSnakeCoords = snakeCoords;
+                snakeCoords.x -= 1 * HORIZONTAL_MULTIPLIER;
                 lastUpdate = clk;
-            }
-            break;
-        case DIR_DOWN:
-            if (clk > lastUpdate + TICK) {
-                head_y += 1;
+                break;
+            case DIR_DOWN:
+                lastSnakeCoords = snakeCoords;
+                snakeCoords.y += 1;
                 lastUpdate = clk;
-            }
-            break;
-        case DIR_UP:
-            if (clk > lastUpdate + TICK) {
-                head_y -= 1;
+                break;
+            case DIR_UP:
+                lastSnakeCoords = snakeCoords;
+                snakeCoords.y -= 1;
                 lastUpdate = clk;
-            }
-            break;
-        case DIR_RIGHT:
-            if (clk > lastUpdate + TICK) {
-                head_x += 1 * HORIZONTAL_MULTIPLIER;
+                break;
+            case DIR_RIGHT:
+                lastSnakeCoords = snakeCoords;
+                snakeCoords.x += 1 * HORIZONTAL_MULTIPLIER;
                 lastUpdate = clk;
+                break;
             }
-            break;
+
+            // update tail
+            updateTail(&snakeTail, lastSnakeCoords);
         }
 
         // Edge wrap-around
-        if (head_x > COLS - 1) {
-            head_x = 0;
+        if (snakeCoords.x > COLS - 1) {
+            snakeCoords.x = 0;
         }
-        if (head_x < 0) {
-            head_x = COLS - 1;
-        }
-
-        if (head_y > LINES - 1) {
-            head_y = 0;
-        }
-        if (head_y < 0) {
-            head_y = LINES - 1;
+        if (snakeCoords.x < 0) {
+            snakeCoords.x = COLS - 1;
         }
 
+        if (snakeCoords.y > LINES - 1) {
+            snakeCoords.y = 0;
+        }
+        if (snakeCoords.y < 0) {
+            snakeCoords.y = LINES - 1;
+        }
+
+        // Erase previous frame
         erase();
-        // Print stats at top-left
-        mvprintw(0, 0, "");
-        printw("head Y: %d\n", head_y);
-        printw("head X: %d\n", head_x);
 
-        // Print the snake head
-        mvaddch(head_y, head_x, curHead);
+        // Debug info
+        mvprintw(0, 0, "");
+        printw("head Y: %d\n", snakeCoords.y);
+        printw("head X: %d\n", snakeCoords.x);
+        printw("Queue Size %d:\n", snakeTail.size);
+
+        // Draw the snake
+        mvaddch(snakeCoords.y, snakeCoords.x, curHead);
+        drawTail(&snakeTail);
 
         // draw the buffer
         refresh();

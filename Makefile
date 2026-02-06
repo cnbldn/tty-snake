@@ -1,5 +1,6 @@
 default:
-	gcc src/main.c -lncurses
+	gcc src/main.c src/coordQueue.c -lncurses
 
-run: src/main.c
-	gcc src/main.c -lncurses && ./a.out
+run:
+	gcc src/main.c src/coordQueue.c -lncurses && ./a.out
+
