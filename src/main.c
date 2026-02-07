@@ -2,7 +2,9 @@
 #include "globals.h"
 
 #include <ncurses.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 const int TICK = 8000;
 // HACK: Since characters are taller than they are wider,
@@ -27,20 +29,27 @@ void drawTail(const Queue *tail) {
     }
 }
 
-void printQueue(const Queue *tail) {
-    struct Node *curNode = tail->front;
-    while (curNode != NULL) {
-        printw("y:%d x:%d\n", curNode->data.y, curNode->data.x);
-        curNode = curNode->next;
-    }
+int isDir(int d) { return (d == 'h' | d == 'j' | d == 'k' | d == 'l'); }
+
+int isOnfood(coord snakeCoords, coord curFoodPos) {
+    return snakeCoords.y == curFoodPos.y && snakeCoords.x == curFoodPos.x;
 }
 
-int isDir(int d) { return (d == 'h' | d == 'j' | d == 'k' | d == 'l'); }
+// Generates a valid coord for the game grid.
+void generateRandomCoord(coord *coord) {
+    coord->x = rand() / ((RAND_MAX + 1u) / COLS);
+    coord->y = rand() / ((RAND_MAX + 1u) / LINES);
+    // TODO: make sure food doesn't end up oob
+    // repurpose the snake oob code into a function
+    if (((COLS / 2) % 2) != coord->x % 2)
+        coord->x++;
+}
 
 void init() {
     initscr();
     noecho();
     curs_set(0);
+    srand(time(NULL));
 }
 
 // Displays the title screen and waits for input.
@@ -77,16 +86,14 @@ int main() {
 
     unsigned int clk = 0;
     unsigned int lastUpdate = 0;
+    int updatedThisCycle = 0;
+
+    coord curFoodPos;
+    generateRandomCoord(&curFoodPos);
+    int isEaten = 0;
 
     if (titleScreen(&curDirection)) {
         return 1;
-    }
-
-    coord aaa;
-    for (int i = 0; i < 50; i++) {
-        aaa.y = snakeCoords.y;
-        aaa.x = snakeCoords.x - i * 2;
-        enqueue(&snakeTail, aaa);
     }
 
     // Initial direction of the head
@@ -105,41 +112,54 @@ int main() {
         break;
     }
 
-    // Main game loop
+    ////////////////////
+    // Main game loop //
+    ////////////////////
     while (1) {
-        int ch = getch();
+        if (isOnfood(snakeCoords, curFoodPos)) {
+            enqueue(&snakeTail, curFoodPos);
+            generateRandomCoord(&curFoodPos);
+        }
 
-        // update state
-        switch (ch) {
-        case 'h':
-            if (curDirection != DIR_RIGHT) {
-                curDirection = DIR_LEFT;
-                curHead = '<';
+        int ch = getch();
+        // NOTE: This way, only the first input in the current cycle is valid.
+        if (!updatedThisCycle) {
+            // update state
+            switch (ch) {
+            case 'h':
+                if (curDirection != DIR_RIGHT) {
+                    curDirection = DIR_LEFT;
+                    curHead = '<';
+                    updatedThisCycle = 1;
+                }
+                break;
+            case 'j':
+                if (curDirection != DIR_UP) {
+                    curDirection = DIR_DOWN;
+                    curHead = 'v';
+                    updatedThisCycle = 1;
+                }
+                break;
+            case 'k':
+                if (curDirection != DIR_DOWN) {
+                    curDirection = DIR_UP;
+                    curHead = '^';
+                    updatedThisCycle = 1;
+                }
+                break;
+            case 'l':
+                if (curDirection != DIR_LEFT) {
+                    curDirection = DIR_RIGHT;
+                    curHead = '>';
+                    updatedThisCycle = 1;
+                }
+                break;
             }
-            break;
-        case 'j':
-            if (curDirection != DIR_UP) {
-                curDirection = DIR_DOWN;
-                curHead = 'v';
-            }
-            break;
-        case 'k':
-            if (curDirection != DIR_DOWN) {
-                curDirection = DIR_UP;
-                curHead = '^';
-            }
-            break;
-        case 'l':
-            if (curDirection != DIR_LEFT) {
-                curDirection = DIR_RIGHT;
-                curHead = '>';
-            }
-            break;
         }
 
         if (clk > lastUpdate + TICK) {
-
             // update position
+
             switch (curDirection) {
             case DIR_LEFT:
                 lastSnakeCoords = snakeCoords;
@@ -165,6 +185,8 @@ int main() {
 
             // update tail
             updateTail(&snakeTail, lastSnakeCoords);
+
+            updatedThisCycle = 0;
         }
 
         // Edge wrap-around
@@ -187,12 +209,14 @@ int main() {
 
         // Debug info
         mvprintw(0, 0, "");
+        printw("LINES: %d COLS: %d\n", LINES, COLS);
         printw("head Y: %d\n", snakeCoords.y);
         printw("head X: %d\n", snakeCoords.x);
-        printw("Queue Size %d:\n", snakeTail.size);
+        printw("Tail Length: %d\n", snakeTail.size);
+        printw("Food Pos: y=%d x=%d\n", curFoodPos.y, curFoodPos.x);
 
-        // Draw the snake
-        mvaddch(snakeCoords.y, snakeCoords.x, curHead);
+        mvprintw(curFoodPos.y, curFoodPos.x, "*");      // Draw food
+        mvaddch(snakeCoords.y, snakeCoords.x, curHead); // Draw snake head
         drawTail(&snakeTail);
 
         // draw the buffer
