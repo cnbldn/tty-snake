@@ -113,7 +113,8 @@ int main() {
         }
 
         // end game if snake eats itself
-        // if (isEatingItself(*snake))
+        if (isEatingItself(*snake)) {
+        }
 
         // Erase previous frame
         erase();
