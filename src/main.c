@@ -1,10 +1,13 @@
 #include "coordQueue.h"
 #include "globals.h"
+#include "snake.h"
 
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#define DEBUGINFO
 
 const int TICK = 8000;
 // HACK: Since characters are taller than they are wider,
@@ -12,37 +15,20 @@ const int TICK = 8000;
 // Treating each horizontal tile as 2 characters smooths it.
 const int HORIZONTAL_MULTIPLIER = 2;
 
-void updateTail(Queue *tail, coord lastHeadPos) {
-    coord tmp;
-    // remove the last part of tail
-    dequeue(tail, &tmp);
-
-    // add
-    enqueue(tail, lastHeadPos);
-}
-
-void drawTail(const Queue *tail) {
-    struct Node *curNode = tail->front;
-    while (curNode != NULL) {
-        mvprintw(curNode->data.y, curNode->data.x, "o");
-        curNode = curNode->next;
-    }
-}
-
 int isDir(int d) { return (d == 'h' | d == 'j' | d == 'k' | d == 'l'); }
 
-int isOnfood(coord snakeCoords, coord curFoodPos) {
-    return snakeCoords.y == curFoodPos.y && snakeCoords.x == curFoodPos.x;
+int isOnfood(coord snakePos, coord foodPos) {
+    return snakePos.y == foodPos.y && snakePos.x == foodPos.x;
 }
 
 // Generates a valid coord for the game grid.
 void generateRandomCoord(coord *coord) {
     coord->x = rand() / ((RAND_MAX + 1u) / COLS);
     coord->y = rand() / ((RAND_MAX + 1u) / LINES);
-    // TODO: make sure food doesn't end up oob
-    // repurpose the snake oob code into a function
-    if (((COLS / 2) % 2) != coord->x % 2)
-        coord->x++;
+    // ensure we're on even grid
+    if (coord->x % 2) {
+        coord->x--;
+    }
 }
 
 void init() {
@@ -53,17 +39,18 @@ void init() {
 }
 
 // Displays the title screen and waits for input.
-int titleScreen(int *curDirection) {
+int titleScreen(direction *dir) {
     // Print the title
     char *titleString = "Press hjkl to start!";
     mvprintw(LINES / 2, COLS / 2 - strlen(titleString) / 2, "%s", titleString);
 
     // Wait for initial input
     int ch;
+    // if it is not valid, keep waiting for key presses
     while (1) {
         ch = getch();
         if (isDir(ch)) {
-            *curDirection = ch;
+            *dir = ch;
             nodelay(stdscr, 1);
             return 0;
         }
@@ -74,16 +61,6 @@ int titleScreen(int *curDirection) {
 int main() {
     init();
 
-    coord snakeCoords = {.y = LINES / 2, .x = COLS / 2};
-    coord lastSnakeCoords = snakeCoords;
-
-    // Snake head char
-    char curHead = '+';
-    int curDirection;
-
-    Queue snakeTail;
-    queueInit(&snakeTail);
-
     unsigned int clk = 0;
     unsigned int lastUpdate = 0;
     int updatedThisCycle = 0;
@@ -92,134 +69,76 @@ int main() {
     generateRandomCoord(&curFoodPos);
     int isEaten = 0;
 
-    if (titleScreen(&curDirection)) {
+    // the key pressed in the title screen is the initial direction
+    direction initialDir;
+    if (titleScreen(&initialDir)) {
         return 1;
     }
 
-    // Initial direction of the head
-    switch (curDirection) {
-    case DIR_LEFT:
-        curHead = '<';
-        break;
-    case DIR_DOWN:
-        curHead = 'v';
-        break;
-    case DIR_UP:
-        curHead = '^';
-        break;
-    case DIR_RIGHT:
-        curHead = '>';
-        break;
-    }
+    Snake snake;
+    snakeInit(&snake, initialDir);
 
+    direction inputDir;
     ////////////////////
     // Main game loop //
     ////////////////////
     while (1) {
-        if (isOnfood(snakeCoords, curFoodPos)) {
-            enqueue(&snakeTail, curFoodPos);
+
+        // food eating
+        if (isOnfood(snake.pos, curFoodPos)) {
+            enqueue(&snake.tail, curFoodPos);
             generateRandomCoord(&curFoodPos);
         }
 
-        int ch = getch();
-        // NOTE: This way, only the first input in the current cycle is valid.
-        if (!updatedThisCycle) {
-            // update state
-            switch (ch) {
-            case 'h':
-                if (curDirection != DIR_RIGHT) {
-                    curDirection = DIR_LEFT;
-                    curHead = '<';
-                    updatedThisCycle = 1;
-                }
-                break;
-            case 'j':
-                if (curDirection != DIR_UP) {
-                    curDirection = DIR_DOWN;
-                    curHead = 'v';
-                    updatedThisCycle = 1;
-                }
-                break;
-            case 'k':
-                if (curDirection != DIR_DOWN) {
-                    curDirection = DIR_UP;
-                    curHead = '^';
-                    updatedThisCycle = 1;
-                }
-                break;
-            case 'l':
-                if (curDirection != DIR_LEFT) {
-                    curDirection = DIR_RIGHT;
-                    curHead = '>';
-                    updatedThisCycle = 1;
-                }
-                break;
-            }
+        // Get input. Last input before the next frame is drawn is valid.
+        switch (getch()) {
+        case 'h':
+            inputDir = DIR_LEFT;
+            break;
+        case 'j':
+            inputDir = DIR_DOWN;
+            break;
+        case 'k':
+            inputDir = DIR_UP;
+            break;
+        case 'l':
+            inputDir = DIR_RIGHT;
+            break;
         }
-
+        // EVERY FRAME
         if (clk > lastUpdate + TICK) {
-            // update position
-
-            switch (curDirection) {
-            case DIR_LEFT:
-                lastSnakeCoords = snakeCoords;
-                snakeCoords.x -= 1 * HORIZONTAL_MULTIPLIER;
-                lastUpdate = clk;
-                break;
-            case DIR_DOWN:
-                lastSnakeCoords = snakeCoords;
-                snakeCoords.y += 1;
-                lastUpdate = clk;
-                break;
-            case DIR_UP:
-                lastSnakeCoords = snakeCoords;
-                snakeCoords.y -= 1;
-                lastUpdate = clk;
-                break;
-            case DIR_RIGHT:
-                lastSnakeCoords = snakeCoords;
-                snakeCoords.x += 1 * HORIZONTAL_MULTIPLIER;
-                lastUpdate = clk;
-                break;
-            }
-
-            // update tail
-            updateTail(&snakeTail, lastSnakeCoords);
-
-            updatedThisCycle = 0;
+            // inputDir = charToDir(ch);
+            snakeUpdatePosition(&snake, inputDir);
+            lastUpdate = clk;
         }
 
-        // Edge wrap-around
-        if (snakeCoords.x > COLS - 1) {
-            snakeCoords.x = 0;
-        }
-        if (snakeCoords.x < 0) {
-            snakeCoords.x = COLS - 1;
-        }
-
-        if (snakeCoords.y > LINES - 1) {
-            snakeCoords.y = 0;
-        }
-        if (snakeCoords.y < 0) {
-            snakeCoords.y = LINES - 1;
-        }
+        // end game if snake eats itself
+        // if (isEatingItself(*snake))
 
         // Erase previous frame
         erase();
 
-        // Debug info
+// Debug info
+#ifdef DEBUGINFO
         mvprintw(0, 0, "");
         printw("LINES: %d COLS: %d\n", LINES, COLS);
-        printw("head Y: %d\n", snakeCoords.y);
-        printw("head X: %d\n", snakeCoords.x);
-        printw("Tail Length: %d\n", snakeTail.size);
+        printw("head Y: %d\n", snake.pos.y);
+        printw("head X: %d\n", snake.pos.x);
+        printw("Tail Length: %d\n", snake.tail.size);
         printw("Food Pos: y=%d x=%d\n", curFoodPos.y, curFoodPos.x);
+        printw("inputDir: %c\n", inputDir);
+        printw("curdir: %c\n", snake.curDirection);
 
-        mvprintw(curFoodPos.y, curFoodPos.x, "*");      // Draw food
-        mvaddch(snakeCoords.y, snakeCoords.x, curHead); // Draw snake head
-        drawTail(&snakeTail);
+        printw("%d\n", clk);
+        printw("%d\n", lastUpdate);
 
-        // draw the buffer
+#endif /* ifdef DEBUGINFO */
+
+        // Draw the food
+        mvprintw(curFoodPos.y, curFoodPos.x, "*");
+
+        drawSnake(&snake);
+
         refresh();
         clk++;
     }

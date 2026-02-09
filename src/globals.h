@@ -1,12 +1,12 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-enum directions {
+typedef enum {
     DIR_LEFT = 'h',
     DIR_DOWN = 'j',
     DIR_UP = 'k',
-    DIR_RIGHT = 'l'
-};
+    DIR_RIGHT = 'l',
+} direction;
 
 typedef struct {
     int y;
