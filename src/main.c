@@ -15,11 +15,9 @@ const int TICK = 8000;
 // Treating each horizontal tile as 2 characters smooths it.
 const int HORIZONTAL_MULTIPLIER = 2;
 
-int isDir(int d) { return (d == 'h' | d == 'j' | d == 'k' | d == 'l'); }
+int coordIsEqual(coord a, coord b) { return a.x == b.x && a.y == b.y; }
 
-int isOnfood(coord snakePos, coord foodPos) {
-    return snakePos.y == foodPos.y && snakePos.x == foodPos.x;
-}
+int isDir(int d) { return (d == 'h' | d == 'j' | d == 'k' | d == 'l'); }
 
 // Generates a valid coord for the game grid.
 void generateRandomCoord(coord *coord) {
@@ -29,6 +27,18 @@ void generateRandomCoord(coord *coord) {
     if (coord->x % 2) {
         coord->x--;
     }
+}
+
+// linear search, returns true if head is on tail
+int isEatingItself(Snake *snake) {
+    struct Node *tmp = snake->tail.front;
+    while (tmp != NULL) {
+        if (coordIsEqual(snake->pos, tmp->data)) {
+            return 1;
+        }
+        tmp = tmp->next;
+    }
+    return 0;
 }
 
 void init() {
@@ -58,6 +68,30 @@ int titleScreen(direction *dir) {
     return 1;
 }
 
+void endScreen(int score) {
+    const int countdown = 5;
+
+    int i = countdown;
+    time_t curTime = time(NULL);
+    time_t startTime = time(NULL);
+
+    while (curTime < startTime + countdown) {
+        erase();
+        mvprintw(LINES / 2, (COLS / 2) - 9, "oops you died %ld...",
+                 countdown - (curTime - startTime));
+        curTime = time(NULL);
+        refresh();
+    }
+
+    erase();
+    mvprintw(LINES / 2, (COLS / 2) - 5, "Score: %d", score);
+    mvprintw((LINES / 2) + 1, (COLS / 2) - 11, "Press any key to exit.");
+    refresh();
+    nodelay(stdscr, 0);
+    int ch = getch();
+    printw("\nexiting..\n");
+}
+
 int main() {
     init();
 
@@ -79,15 +113,16 @@ int main() {
     snakeInit(&snake, initialDir);
 
     direction inputDir;
+    int isOnFood = 0;
+
     ////////////////////
     // Main game loop //
     ////////////////////
     while (1) {
 
         // food eating
-        if (isOnfood(snake.pos, curFoodPos)) {
-            enqueue(&snake.tail, curFoodPos);
-            generateRandomCoord(&curFoodPos);
+        if (coordIsEqual(snake.pos, curFoodPos)) {
+            isOnFood = 1;
         }
 
         // Get input. Last input before the next frame is drawn is valid.
@@ -109,11 +144,18 @@ int main() {
         if (clk > lastUpdate + TICK) {
             // inputDir = charToDir(ch);
             snakeUpdatePosition(&snake, inputDir);
+            if (isOnFood) {
+                enqueue(&snake.tail, curFoodPos);
+                generateRandomCoord(&curFoodPos);
+                isOnFood = 0;
+            }
             lastUpdate = clk;
         }
 
         // end game if snake eats itself
-        if (isEatingItself(*snake)) {
+        if (isEatingItself(&snake)) {
+            endScreen(snake.tail.size);
+            break;
         }
 
         // Erase previous frame
