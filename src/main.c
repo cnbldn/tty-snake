@@ -2,6 +2,7 @@
 #include "globals.h"
 #include "snake.h"
 
+#include <locale.h>
 #include <ncurses.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,11 +10,7 @@
 
 #define DEBUGINFO
 
-const int TICK = 8000;
-// HACK: Since characters are taller than they are wider,
-// the percieved horizontal speed > vertical speed.
-// Treating each horizontal tile as 2 characters smooths it.
-const int HORIZONTAL_MULTIPLIER = 2;
+const int TICK = 2000;
 
 int coordIsEqual(coord a, coord b) { return a.x == b.x && a.y == b.y; }
 
@@ -42,6 +39,7 @@ int isEatingItself(Snake *snake) {
 }
 
 void init() {
+    setlocale(LC_ALL, "");
     initscr();
     noecho();
     curs_set(0);
@@ -177,10 +175,20 @@ int main() {
 
 #endif /* ifdef DEBUGINFO */
 
-        // Draw the food
-        mvprintw(curFoodPos.y, curFoodPos.x, "*");
+        use_default_colors();
+        start_color();
+        init_pair(1, COLOR_RED, -1);
+        init_pair(2, COLOR_GREEN, -1);
 
+        // Draw the food
+        attron(COLOR_PAIR(1));
+        mvprintw(curFoodPos.y, curFoodPos.x, "██");
+        attroff(COLOR_PAIR(1));
+
+        // \e[0;32m
+        attron(COLOR_PAIR(2));
         drawSnake(&snake);
+        attroff(COLOR_PAIR(2));
 
         refresh();
         clk++;

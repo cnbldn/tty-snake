@@ -2,9 +2,10 @@
 #include "coordQueue.h"
 #include "globals.h"
 #include <ncurses.h>
+#include <string.h>
 
 // helper functions
-char getHeadChar(direction);
+char *getHeadChar(direction);
 int isValidDirection(direction cur, direction dir);
 
 // class functions
@@ -16,7 +17,9 @@ void snakeInit(Snake *snake, direction startingDir) {
     snake->lastPos = snake->pos;
 
     snake->curDirection = startingDir;
-    snake->curHeadSymbol = getHeadChar(startingDir);
+    strncpy(snake->curHeadSymbol, getHeadChar(startingDir),
+            sizeof(snake->curHeadSymbol));
+    // snake->curHeadSymbol = getHeadChar(startingDir);
 
     queueInit(&snake->tail);
 }
@@ -27,7 +30,9 @@ void snakeUpdatePosition(Snake *snake, direction dir) {
     snake->lastPos = snake->pos;
     if (dir != 0 && isValidDirection(snake->curDirection, dir)) {
         snake->curDirection = dir;
-        snake->curHeadSymbol = getHeadChar(dir);
+        strncpy(snake->curHeadSymbol, getHeadChar(dir),
+                sizeof(snake->curHeadSymbol));
+        // snake->curHeadSymbol = getHeadChar(dir);
     }
 
     switch (snake->curDirection) {
@@ -71,11 +76,12 @@ void drawSnake(const Snake *snake) {
     // Draw the tail
     struct Node *curNode = snake->tail.front;
     while (curNode != NULL) {
-        mvprintw(curNode->data.y, curNode->data.x, "o");
+        mvprintw(curNode->data.y, curNode->data.x, "██");
         curNode = curNode->next;
     }
     // Draw the head
-    mvaddch(snake->pos.y, snake->pos.x, snake->curHeadSymbol);
+    // mvprintw(snake->pos.y, snake->pos.x, "%s", snake->curHeadSymbol);
+    mvprintw(snake->pos.y, snake->pos.x, "%s", "██");
 }
 
 int isValidDirection(direction cur, direction dir) {
@@ -89,15 +95,15 @@ int isValidDirection(direction cur, direction dir) {
 }
 
 // Returns the corresponding symbol for the direction
-char getHeadChar(direction dir) {
+char *getHeadChar(direction dir) {
     switch (dir) {
     case DIR_LEFT:
-        return '<';
+        return "◀";
     case DIR_DOWN:
-        return 'v';
+        return "▼";
     case DIR_UP:
-        return '^';
+        return "▲";
     case DIR_RIGHT:
-        return '>';
+        return "▶";
     }
 }

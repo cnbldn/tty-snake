@@ -7,7 +7,7 @@
 typedef struct {
     coord pos;
     coord lastPos;
-    char curHeadSymbol;
+    char curHeadSymbol[4];
     direction curDirection;
     Queue tail;
 
